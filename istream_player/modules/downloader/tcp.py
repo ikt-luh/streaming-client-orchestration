@@ -121,7 +121,8 @@ class TCPClientImpl(Module, DownloadManager):
             self._downloading_task = asyncio.create_task(self._download_inner(req_url))
 
     async def _create_session(self, session_start_event):
-        ssl_context = ssl.SSLContext(protocol=ssl.PROTOCOL_TLS_SERVER, verify_mode=ssl.CERT_NONE)
+        ssl_context = ssl.SSLContext(protocol=ssl.PROTOCOL_TLS_CLIENT, verify_mode=ssl.CERT_NONE)
+        ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
         # ssl_context.keylog_filename = self.ssl_keylog_file
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_context)) as session:

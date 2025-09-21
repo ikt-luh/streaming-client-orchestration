@@ -131,11 +131,18 @@ class DefaultMPDParser(MPDParser):
         width = int(tree.attrib["width"])
         height = int(tree.attrib["height"])
 
+        representation_base_url = ""
+        base_url_element = tree.find("BaseURL")
+        if base_url_element is not None:
+            representation_base_url = base_url_element.text or ""
+
+        full_base_url = base_url + representation_base_url
+
         assert segment_template is not None, "Segment Template not found in representation"
 
         initialization = segment_template.attrib["initialization"]
         initialization = initialization.replace("$RepresentationID$", id_)
-        initialization = base_url + initialization
+        initialization = full_base_url + initialization
         segments: Dict[int, Segment] = {}
 
         timescale = int(segment_template.attrib["timescale"])
@@ -148,7 +155,7 @@ class DefaultMPDParser(MPDParser):
             start_time = 0
             for segment in segment_timeline:
                 duration = float(segment.attrib["d"]) / timescale
-                url = base_url + re.sub(r"\$Number(%\d+d)\$", r"\1", media) % num
+                url = full_base_url + re.sub(r"\$Number(%\d+d)\$", r"\1", media) % num
                 if "t" in segment.attrib:
                     start_time = float(segment.attrib["t"]) / timescale
                 segments[num] = Segment(url, initialization, duration, start_time, as_id, int(id_))
@@ -157,7 +164,7 @@ class DefaultMPDParser(MPDParser):
 
                 if "r" in segment.attrib:  # repeat
                     for _ in range(int(segment.attrib["r"])):
-                        url = base_url + self.var_repl(media, {"Number": num})
+                        url = full_base_url + self.var_repl(media, {"Number": num})
                         segments[num] = Segment(url, initialization, duration, start_time, as_id, int(id_))
                         num += 1
                         start_time += duration
@@ -169,7 +176,7 @@ class DefaultMPDParser(MPDParser):
             duration = float(segment_template.attrib["duration"]) / timescale
             self.log.debug(f"{num_segments=}, {duration=}")
             for _ in range(num_segments):
-                url = base_url + self.var_repl(media, {"Number": num})
+                url = full_base_url + self.var_repl(media, {"Number": num})
                 segments[num] = Segment(url, initialization, duration, start_time, as_id, int(id_))
                 num += 1
                 start_time += duration
