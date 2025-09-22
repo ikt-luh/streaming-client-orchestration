@@ -1,0 +1,23 @@
+input: "http://localhost:8080/1s_segments/loot/loot.mpd" #http://bitmovin-a.akamaihd.net/content/MI201109210084_1/mpds/f08e80da-bf1d-4e3d-8899-f0f6155f6efa.mpd"
+run_dir: "./logs"
+
+time_factor: 1.0
+
+mod_mpd: "mpd"
+mod_downloader: "tcp"
+mod_bw: "bw_meter"
+mod_abr: "dash"
+mod_scheduler: "scheduler"
+mod_buffer: "buffer_manager"
+mod_player: "dash"
+mod_analyzer:
+  - "data_collector"
+  - "file_saver"
+
+buffer_duration: 8.0
+safe_buffer_level: 6.0
+panic_buffer_level: 2.5
+min_rebuffer_duration: 2.0
+min_start_duration: 2.0
+
+verbose: true
