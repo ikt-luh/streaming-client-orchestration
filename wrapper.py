@@ -108,6 +108,14 @@ class Wrapper:
         load_from_config_file(config_file, config)
 
         env_overrides = self.load_env_overrides()
+        
+        container_id = os.environ.get("ID", "")
+        container_exp = os.environ.get("EXP_STR", "")
+        
+        if container_id != "" and container_exp != "":
+            base_run_dir = env_overrides.get("run_dir", getattr(config, "run_dir", "./logs"))
+            env_overrides["run_dir"] = os.path.join(base_run_dir, container_exp, container_id)
+    
         if env_overrides:
             print(f"Applying environment overrides: {list(env_overrides.keys())}")
             load_from_dict(env_overrides, config)
