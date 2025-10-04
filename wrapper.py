@@ -8,13 +8,17 @@ from istream_player.core.module_composer import PlayerComposer
 from istream_player.main import load_from_dict, load_from_config_file
 import asyncio
 import logging
+import random
+import hashlib
 
+control_file = Path(os.getenv("CONTROL_FILE", "/app/control/run.flag"))
 
 class Wrapper:
     def __init__(self):
         self.config_dir = Path(__file__).parent / "resources"
         self.config_dir.mkdir(exist_ok=True)
         self.create_default_configs()
+        self.counter = 0
 
     def create_default_configs(self):
         default_config = {
@@ -92,6 +96,19 @@ class Wrapper:
         config_file = self.config_dir / f"{config_name}.yaml"
         self.run_with_config_file(str(config_file), overrides)
 
+    def generate_start_time_percentage(self, id: int, lamda: float, exp_id: int) -> float:
+        
+        hash_input = f"{id}_{exp_id}_{self.counter}".encode()
+        seed = int(hashlib.md5(hash_input).hexdigest()[:8], 16)
+        random.seed(seed)
+        
+        while True:
+            random_var = random.expovariate(lamda)
+            random_perc = random_var * 0.1
+            
+            if random_perc <= 1.0:
+                return random_perc
+        
     def run_with_config_file(self, config_file: str, overrides: Dict[str, Any] = None):
         try:
             # Check Python version
@@ -111,10 +128,15 @@ class Wrapper:
         
         container_id = os.environ.get("ID", "")
         container_exp = os.environ.get("EXP_STR", "")
+        container_lamda = os.environ.get("LAMDA", "")
         
         if container_id != "" and container_exp != "":
             base_run_dir = env_overrides.get("run_dir", getattr(config, "run_dir", "./logs"))
             env_overrides["run_dir"] = os.path.join(base_run_dir, container_exp, container_id)
+            
+            experiment_id = int(container_exp.split("_")[1])
+            start_time_percentage = self.generate_start_time_percentage(int(container_id), float(container_lamda), experiment_id)
+            env_overrides["start_time_percentage"] = start_time_percentage
     
         if env_overrides:
             print(f"Applying environment overrides: {list(env_overrides.keys())}")
@@ -170,7 +192,14 @@ def main():
     first_arg = sys.argv[1]
     config_name = first_arg
     overrides = parse_overrides(sys.argv[2:])
-    wrapper.run_with_config_name(config_name, overrides)
+    
+    while True: 
+        if not control_file.exists() or control_file.read_text().strip() != "1":
+            print("Stopp container loop")
+            break
+        
+        wrapper.run_with_config_name(config_name, overrides)
+        wrapper.counter += 1
 
 
 if __name__ == "__main__":

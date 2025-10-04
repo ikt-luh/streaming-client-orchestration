@@ -14,5 +14,5 @@ start-player ID:
 test-player:
 	docker compose -f docker-compose.player.yaml run --rm --service-ports --entrypoint /bin/sh istream_player
 
-start-experiment COUNT:
-	python3 starting_script.py {{COUNT}}
+start-experiment COUNT EXP_DURATION LAMDA:
+	python3 starting_script.py {{COUNT}} {{EXP_DURATION}} {{LAMDA}}

@@ -55,6 +55,7 @@ class SchedulerImpl(Module, Scheduler):
         self.buffer_manager = buffer_manager
         self.abr_controller = abr_controller
         self.mpd_provider = mpd_provider
+        self.start_time_percentage = config.start_time_percentage
 
         select_as = config.select_as.split("-")
         if len(select_as) == 1 and select_as[0].isdecimal():
@@ -87,8 +88,22 @@ class SchedulerImpl(Module, Scheduler):
         self.adaptation_sets = self.select_adaptation_sets(self.mpd_provider.mpd.adaptation_sets)
         # print(f"{self.adaptation_sets=}")
 
-        # Start from the min segment index
-        self._index = self.segment_limits(self.adaptation_sets)[0]
+        # Start from the min segment index  --old
+        # self._index = self.segment_limits(self.adaptation_sets)[0]
+        # Start from the start time given from the config
+        
+        min_index = self.segment_limits(self.adaptation_sets)[0]
+        max_index = self.segment_limits(self.adaptation_sets)[1]
+
+        if self.start_time_percentage > 0.0:
+            total_segments = max_index - min_index + 1
+            target_offset = int(self.start_time_percentage * total_segments)
+            target_index = min_index + target_offset
+
+            self._index = min(target_index, max_index)
+        else:
+            self._index = min_index
+        
         while True:
             # Check buffer level
             if self.buffer_manager.buffer_level > self.max_buffer_duration:
