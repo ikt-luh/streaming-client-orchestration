@@ -14,5 +14,11 @@ start-player ID:
 test-player:
 	docker compose -f docker-compose.player.yaml run --rm --service-ports --entrypoint /bin/sh istream_player
 
+test-csv EXP_DURATION LAMDA CSV_FILE:
+	python3 starting_script.py --count 1 --exp-duration {{EXP_DURATION}} --lamda {{LAMDA}} --csv-file {{CSV_FILE}}
+
+test-bandwidth EXP_DURATION LAMDA BANDWIDTH:
+	python3 starting_script.py --count 1 --exp-duration {{EXP_DURATION}} --lamda {{LAMDA}} --bandwidth {{BANDWIDTH}}
+
 start-experiment COUNT EXP_DURATION LAMDA:
-	python3 starting_script.py {{COUNT}} {{EXP_DURATION}} {{LAMDA}}
+	python3 starting_script.py --count {{COUNT}} --exp-duration {{EXP_DURATION}} --lamda {{LAMDA}}

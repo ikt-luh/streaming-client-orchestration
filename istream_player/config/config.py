@@ -75,7 +75,7 @@ class PlayerConfig:
     min_rebuffer_duration: float = 2
     min_start_duration: float = 2
     
-    start_time_percentage: float = 0.0
+    start_time: float = 0.0
 
     select_as: str = "-"
 
