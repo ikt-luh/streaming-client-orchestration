@@ -10,11 +10,11 @@ import asyncio
 import logging
 import random
 import time
+import json
 
 container_id = os.environ.get("ID", "")
 container_exp = os.environ.get("EXP_STR", "")
 lamda = os.environ.get("LAMDA", "")
-active_file = Path(f"control/active_{container_id}.flag")
 control_file = Path(os.getenv("CONTROL_FILE", "/app/control/run.flag"))
 ready_file = Path("control/ready.flag")  
 
@@ -103,7 +103,7 @@ class Wrapper:
         self.run_with_config_file(str(config_file), overrides)
 
     # draw random value for sleep time duration between sessions
-    def generate_start_time(self) -> float:
+    def generate_sleep_time(self) -> float:
             return random.expovariate(float(lamda))
         
     def run_with_config_file(self, config_file: str, overrides: Dict[str, Any] = None):
@@ -121,7 +121,7 @@ class Wrapper:
             base_run_dir = env_overrides.get("run_dir", getattr(config, "run_dir", "./logs"))
             env_overrides["run_dir"] = os.path.join(base_run_dir, container_exp, container_id)
             
-        start_time = self.generate_start_time()
+        sleep_time = self.generate_sleep_time()
     
         if env_overrides:
             print(f"applying environment overrides: {list(env_overrides.keys())}")
@@ -145,18 +145,14 @@ class Wrapper:
         config.validate()
         print(f"starting player with input: {getattr(config, 'input', 'N/A')}")
         
-        # mark container as active
-        active_file.parent.mkdir(exist_ok=True)
-        active_file.write_text("1")
-        
         # wait for tc bandwidth control skript to signal readiness
         while True:
             if ready_file.exists() and ready_file.read_text().strip() == "1":
                 print("waiting for ready flag")
                 break
             time.sleep(0.1)
-    
-        time.sleep(start_time) # wait for random the random time
+        log_session(env_overrides["run_dir"], time.time(), sleep_time)
+        time.sleep(sleep_time) # wait for random the random time
         asyncio.run(composer.run(config)) # run session
 
 
@@ -176,6 +172,23 @@ def parse_overrides(args):
 
     return overrides
 
+# log extra info of session
+def log_session(path: str, timestamp: float, sleep_duration: float):
+    filepath = os.path.join(path, "info.json")
+    try:
+        with open(filepath, "r") as f:
+            logs = json.load(f)
+            
+    except FileNotFoundError:
+        logs = []
+        
+    logs.append({
+        "timestamp": timestamp,
+        "sleep_duration": sleep_duration
+    })
+
+    with open(filepath, "w") as f:
+        json.dump(logs, f)
 
 def main():
     wrapper = Wrapper()
@@ -194,9 +207,6 @@ def main():
         # stop restarting the session
         if not control_file.exists() or control_file.read_text().strip() != "1":
             print("stop container loop")
-            
-            active_file.parent.mkdir(exist_ok=True)
-            active_file.write_text("0")
             break
         
         wrapper.run_with_config_name(config_name, overrides)

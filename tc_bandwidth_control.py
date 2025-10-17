@@ -15,7 +15,7 @@ ready_file = Path("control/ready.flag")
 
 
 class BandwidthController:
-    def __init__(self, count: int, csv_files: List[str], static_bandwidth: float = None):
+    def __init__(self, count: int, csv_files: List[str], static_bandwidth: float = None, target_bandwidth_csv: int = 0):
         self.count = count
         self.csv_files = csv_files
         self.static_bandwidth = static_bandwidth
@@ -23,6 +23,7 @@ class BandwidthController:
         self.container_names = []
         self.container_csv_map = {}
         self.csv_data = {}
+        self.target_bandwidth_csv = target_bandwidth_csv
     
     # check if csv file exists
     def validate_csv_files(self):
@@ -154,6 +155,34 @@ class BandwidthController:
                                 bandwidths.append(bandwidth)
                     except (KeyError, ValueError):
                         continue
+                
+                #time based scaling
+                if self.target_bandwidth_csv > 0:
+                    if len(bandwidths) > 1:
+                        sum = 0.0
+                        total_time = 0.0
+                        
+                        for j in range(len(timestamps) - 1):
+                            diff = timestamps[j + 1] - timestamps[j]
+                            sum += bandwidths[j] * diff
+                            total_time += diff
+                        
+                        if total_time > 0:
+                            time_avg = sum / total_time
+                            scale_factor = self.target_bandwidth_csv / time_avg
+                        
+                        else:
+                            avg = sum(bandwidths) / len(bandwidths)
+                            scale_factor = self.target_bandwidth_csv / avg
+                        
+                        bandwidths = [int(b * scale_factor) for b in bandwidths]
+                    
+                    elif len(bandwidths) == 1:
+                        bandwidths = [self.target_bandwidth_csv]
+                        
+                    else:
+                        timestamps = [0.0]
+                        bandwidths = [self.target_bandwidth_csv]
             
             self.csv_data[i] = {
                 'timestamps': timestamps,
@@ -161,21 +190,25 @@ class BandwidthController:
                 'length': len(timestamps),
                 'current_index': 0
             }
+            
     # set bandwidth
     def set_bandwidth(self, veth: str, bandwidth: int):
-        # remove previous rule
-        subprocess.run(
-            ['sudo', 'tc', 'qdisc', 'del', 'dev', veth, 'root'],
-            stderr=subprocess.DEVNULL
-        )
+        try:
+            # remove previous rule
+            subprocess.run(
+                ['sudo', 'tc', 'qdisc', 'del', 'dev', veth, 'root'],
+                stderr=subprocess.DEVNULL
+            )
+
+            # set new bandwidth
+            subprocess.run(
+                ['sudo', 'tc', 'qdisc', 'add', 'dev', veth, 'root', 'tbf',
+                 'rate', f'{bandwidth}kbit', 'burst', '32kbit', 'latency', '400ms'],
+                capture_output=True, text=True
+            )
+        except Exception:
+            return
         
-        # set new bandwidth
-        subprocess.run(
-            ['sudo', 'tc', 'qdisc', 'add', 'dev', veth, 'root', 'tbf',
-             'rate', f'{bandwidth}kbit', 'burst', '32kbit', 'latency', '400ms'],
-            capture_output=True, text=True
-        )
-    
     def run(self):
         # signal start of bandwidth control     
         ready_file.parent.mkdir(exist_ok=True)
@@ -190,11 +223,6 @@ class BandwidthController:
             for i in range(len(self.veth_interfaces)):
                 veth = self.veth_interfaces[i]
                 data = self.csv_data[i]
-                
-                active_file = Path(f"control/active_{i}.flag")
-                if not active_file.exists() or active_file.read_text().strip() != "1":
-                    # skip bandwidth control of inactive containers
-                    continue
                 
                 current_idx = data['current_index']
                 
@@ -230,6 +258,7 @@ def main():
     parser.add_argument('--count', type=int, required=True, help='number of containers')
     parser.add_argument('--csv-files', nargs='+', help='csv files for bandwidth control')
     parser.add_argument('--bandwidth', type=int, help='static bandwidth in kbit/s')
+    parser.add_argument('--target-bandwidth-csv', type=int, help='average bandwidth to which csv profiles are scaled')
     
     args = parser.parse_args()
     
@@ -247,7 +276,7 @@ def main():
         # csv bandwidth
         csv_files = args.csv_files
         print("csv files:\n" + "\n".join(f"  - {f}" for f in csv_files))
-        controller = BandwidthController(count, csv_files)
+        controller = BandwidthController(count, csv_files, target_bandwidth_csv=args.target_bandwidth_csv)
         controller.validate_csv_files()
         controller.collect_veth_interfaces()
         controller.load_csv_data()

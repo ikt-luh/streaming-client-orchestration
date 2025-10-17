@@ -1,5 +1,4 @@
 import os
-import sys
 import subprocess
 from pathlib import Path
 import re
@@ -39,10 +38,11 @@ def wait_for_container_startup(prefixes):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--count', type=int, required=True, help='number of containers')
-    parser.add_argument('--exp-duration', type=int, required=True, help='experiment duration in seconds')
+    parser.add_argument('--exp_duration', type=int, required=True, help='experiment duration in seconds')
     parser.add_argument('--lamda', type=str, required=True, help='lambda parameter for exponential distribution')
-    parser.add_argument('--csv-file', type=Path, default=None, help='csv files for bandwidth control')
+    parser.add_argument('--csv_file', type=Path, default=None, help='csv files for bandwidth control')
     parser.add_argument('--bandwidth', type=int, default=None, help='static bandwidth value in kbit/s')
+    parser.add_argument('--target_bandwidth_csv', type=int, default=None, help='average bandwidth to which csv profiles are scaled')
     
     args = parser.parse_args()
     
@@ -93,7 +93,8 @@ def main():
     else:
         tc_proc = subprocess.Popen([
             "python3", "tc_bandwidth_control.py", 
-            "--count", str(count), 
+            "--count", str(count),
+            "--target-bandwidth-csv", str(args.target_bandwidth_csv),
             "--csv-files"] + csv_bandwidth_list
         )
     try:
