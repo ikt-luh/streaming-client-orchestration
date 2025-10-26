@@ -20,5 +20,5 @@ test-csv EXP_DURATION LAMDA CSV_FILE:
 test-bandwidth EXP_DURATION LAMDA BANDWIDTH:
 	python3 starting_script.py --count 1 --exp_duration {{EXP_DURATION}} --lamda {{LAMDA}} --bandwidth {{BANDWIDTH}}
 
-start-experiment COUNT EXP_DURATION LAMDA TARGET_BANDWIDTH_CSV:
-	python3 starting_script.py --count {{COUNT}} --exp_duration {{EXP_DURATION}} --lamda {{LAMDA}} --target_bandwidth_csv {{TARGET_BANDWIDTH_CSV}}
+start-experiment COUNT EXP_DURATION LAMDA TARGET_BANDWIDTH_CSV NODE_ID:
+	python3 starting_script.py --count {{COUNT}} --exp_duration {{EXP_DURATION}} --lamda {{LAMDA}} --target_bandwidth_csv {{TARGET_BANDWIDTH_CSV}} --node_id {{NODE_ID}}

@@ -36,7 +36,7 @@ pip install .
 
 ### How to Run
 ```bash
-just start-experiment <number_of_containers> <duration_in_seconds> <lambda_of_distribution>
+just start-experiment <number_of_containers> <duration_in_seconds> <lambda_of_distribution> <target_bandwidth> <id of node>
 ```
 
 ### Testing modes

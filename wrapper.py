@@ -16,15 +16,16 @@ container_id = os.environ.get("ID", "")
 container_exp = os.environ.get("EXP_STR", "")
 lamda = os.environ.get("LAMDA", "")
 control_file = Path(os.getenv("CONTROL_FILE", "/app/control/run.flag"))
-ready_file = Path("control/ready.flag")  
+ready_file = Path("control/ready.flag")
+node_id = os.environ.get("NODE_ID", "")
 
 class Wrapper:
     def __init__(self):
         self.config_dir = Path(__file__).parent / "resources"
         self.config_dir.mkdir(exist_ok=True)
         self.create_default_configs()
-        self.random = random.seed(container_id)
-        
+        self.random = random.seed(f"{container_id}{node_id}")
+        self.node_logged = False
 
     def create_default_configs(self):
         default_config = {
@@ -151,6 +152,9 @@ class Wrapper:
                 print("waiting for ready flag")
                 break
             time.sleep(0.1)
+        if not self.node_logged and node_id:
+            log_session(env_overrides["run_dir"],node_id=node_id)
+            self.node_logged = True
         log_session(env_overrides["run_dir"], time.time(), sleep_time)
         time.sleep(sleep_time) # wait for random the random time
         asyncio.run(composer.run(config)) # run session
@@ -173,22 +177,26 @@ def parse_overrides(args):
     return overrides
 
 # log extra info of session
-def log_session(path: str, timestamp: float, sleep_duration: float):
+def log_session(path: str, timestamp: float = None, sleep_duration: float = None, node_id: str = None):
     filepath = os.path.join(path, "info.json")
+    os.makedirs(path, exist_ok=True)
+
     try:
         with open(filepath, "r") as f:
-            logs = json.load(f)
-            
-    except FileNotFoundError:
-        logs = []
-        
-    logs.append({
-        "timestamp": timestamp,
-        "sleep_duration": sleep_duration
-    })
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        data = {"node_id": node_id, "sessions": []}
+
+    if node_id and "node_id" not in data:
+        data["node_id"] = node_id
+    elif timestamp is not None and sleep_duration is not None:
+        data.setdefault("sessions", []).append({
+            "timestamp": timestamp,
+            "sleep_duration": sleep_duration
+        })
 
     with open(filepath, "w") as f:
-        json.dump(logs, f)
+        json.dump(data, f)
 
 def main():
     wrapper = Wrapper()

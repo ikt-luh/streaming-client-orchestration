@@ -12,3 +12,4 @@ services:
       EXP_STR: ${EXP_STR:-}
       CONTROL_FILE: /app/control/run.flag
       LAMDA: ${LAMDA:-0.5}
+      NODE_ID: ${NODE_ID:-0}

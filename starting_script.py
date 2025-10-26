@@ -43,12 +43,14 @@ def main():
     parser.add_argument('--csv_file', type=Path, default=None, help='csv files for bandwidth control')
     parser.add_argument('--bandwidth', type=int, default=None, help='static bandwidth value in kbit/s')
     parser.add_argument('--target_bandwidth_csv', type=int, default=None, help='average bandwidth to which csv profiles are scaled')
+    parser.add_argument('--node_id', type=int, default=0, help='id of node')
     
     args = parser.parse_args()
     
     count = args.count
     exp_duration = args.exp_duration
     lamda = args.lamda
+    node_id = args.node_id
         
     base_logs = Path("./logs")
     exp_dir, exp_str = get_next_experiment_dir(base_logs)
@@ -72,6 +74,7 @@ def main():
         env["EXP_STR"] = exp_str
         env["LOG_DIR"] = str(log_dir.resolve())
         env["LAMDA"] = lamda
+        env["NODE_ID"] = str(node_id)
         
         # start container
         docker_args = [
