@@ -1,0 +1,235 @@
+import logging
+import os
+import re
+from abc import ABC, abstractmethod
+from math import ceil
+from typing import Dict, Optional
+from xml.etree import ElementTree
+from xml.etree.ElementTree import Element
+
+from istream_player.models.mpd_objects import MPD, AdaptationSet, Representation, Segment
+
+
+class MPDParsingException(BaseException):
+    pass
+
+
+class MPDParser(ABC):
+    @abstractmethod
+    def parse(self, content: str, url: str) -> MPD:
+        pass
+
+
+class DefaultMPDParser(MPDParser):
+    log = logging.getLogger("DefaultMPDParser")
+
+    @staticmethod
+    def parse_iso8601_time(duration: Optional[str]) -> float:
+        """
+        Parse the ISO8601 time string to the number of seconds
+        """
+        if duration is None or duration == "":
+            return 0
+        pattern = r"^PT(?:(\d+(?:.\d+)?)H)?(?:(\d+(?:.\d+)?)M)?(?:(\d+(?:.\d+)?)S)?$"
+        results = re.match(pattern, duration)
+        if results is not None:
+            dur = [float(i) if i is not None else 0 for i in results.group(1, 2, 3)]
+            dur = 3600 * dur[0] + 60 * dur[1] + dur[2]
+            return dur
+        else:
+            return 0
+
+    @staticmethod
+    def remove_namespace_from_content(content):
+        """
+        Remove the namespace string from XML string
+        """
+        content = re.sub('xmlns="[^"]+"', "", content, count=1)
+        return content
+
+    def parse(self, content: str, url: str) -> MPD:
+        content = self.remove_namespace_from_content(content)
+        root = ElementTree.fromstring(content)
+
+        type_ = root.attrib["type"]
+        assert type_ == "static" or type_ == "dynamic"
+
+        # media presentation duration
+        media_presentation_duration = self.parse_iso8601_time(root.attrib.get("mediaPresentationDuration", ""))
+        self.log.info(f"{media_presentation_duration=}")
+
+        # min buffer duration
+        min_buffer_time = self.parse_iso8601_time(root.attrib.get("minBufferTime", ""))
+        self.log.info(f"{min_buffer_time=}")
+
+        # max segment duration
+        max_segment_duration = self.parse_iso8601_time(root.attrib.get("maxSegmentDuration", ""))
+        self.log.info(f"{max_segment_duration=}")
+
+        period = root.find("Period")
+
+        if period is None:
+            raise MPDParsingException('Cannot find "Period" tag')
+
+        adaptation_sets: Dict[int, AdaptationSet] = {}
+
+        base_url = os.path.dirname(url) + "/"
+
+        for index, adaptation_set_xml in enumerate(period):
+            content_type = adaptation_set_xml.attrib.get("contentType", "video").lower()
+            if content_type in ["video", "pointcloud"]:
+                adaptation_set: AdaptationSet = self.parse_adaptation_set(
+                    adaptation_set_xml, base_url, index, media_presentation_duration
+                )
+                adaptation_sets[adaptation_set.id] = adaptation_set
+
+        return MPD(content, url, type_, media_presentation_duration, max_segment_duration, min_buffer_time, adaptation_sets, root.attrib)
+
+    def parse_adaptation_set(
+        self, tree: Element, base_url, index: Optional[int], media_presentation_duration: float
+    ) -> AdaptationSet:
+        id_ = int(tree.attrib.get("id", str(index)))
+        content_type = tree.attrib.get("contentType", "video")
+        assert (
+            content_type == "video" or content_type == "audio" or content_type == "pointcloud"
+        ), f"Only 'video', 'audio' or 'pointcloud' content_type is supported, Got {content_type}"
+
+        frame_rate = tree.attrib.get("frameRate")
+        
+        if content_type == "pointcloud":
+            max_x_pos = float(tree.attrib.get("maxXPos", 0))
+            max_y_pos = float(tree.attrib.get("maxYPos", 0))
+            max_z_pos = float(tree.attrib.get("maxZPos", 0))
+            max_x_rot = float(tree.attrib.get("maxXRot", 0))
+            max_y_rot = float(tree.attrib.get("maxYRot", 0))
+            max_z_rot = float(tree.attrib.get("maxZRot", 0))
+            par = None  # Point clouds don't have pixel aspect ratio
+            self.log.debug(f"{frame_rate=}, {max_x_pos=}, {max_y_pos=}, {max_z_pos=}, {max_x_rot=}, {max_y_rot=}, {max_z_rot=}")
+        else:
+            max_x_pos = max_y_pos = max_z_pos = 0
+            max_x_rot = max_y_rot = max_z_rot = 0
+            max_width = int(tree.attrib.get("maxWidth", 0))
+            max_height = int(tree.attrib.get("maxHeight", 0))
+            par = tree.attrib.get("par")
+            self.log.debug(f"{frame_rate=}, {max_width=}, {max_height=}, {par=}")
+
+        representations = {}
+        # GPAC MPD has segment template inside adaptation set
+        segment_template: Optional[Element] = tree.find("SegmentTemplate")
+
+        for representation_tree in tree.findall("Representation"):
+            representation = self.parse_representation(
+                representation_tree, id_, base_url, segment_template, media_presentation_duration, content_type
+            )
+            representations[representation.id] = representation
+            
+        if content_type == "pointcloud":
+            return AdaptationSet(int(id_), content_type, frame_rate, max_x_pos, max_y_pos, par, representations, tree.attrib, 
+                               max_z_pos=max_z_pos, max_x_rot=max_x_rot, max_y_rot=max_y_rot, max_z_rot=max_z_rot)
+        else:
+            return AdaptationSet(int(id_), content_type, frame_rate, max_width, max_height, par, representations, tree.attrib)
+
+    def parse_representation(
+        self, tree: Element, as_id: int, base_url, segment_template: Optional[Element], media_presentation_duration: float, content_type: str = "video"
+    ) -> Representation:
+        segment_template = tree.find("SegmentTemplate") or segment_template
+        if segment_template is not None:
+            return self.parse_representation_with_segment_template(
+                tree, as_id, base_url, segment_template, media_presentation_duration, content_type
+            )
+        else:
+            raise MPDParsingException("The MPD support is not complete yet")
+
+    def parse_representation_with_segment_template(
+        self, tree: Element, as_id: int, base_url, segment_template: Element, media_presentation_duration: float, content_type: str = "video"
+    ) -> Representation:
+        id_ = tree.attrib["id"]
+        mime = tree.attrib["mimeType"]
+        codec = tree.attrib["codecs"]
+        bandwidth = int(tree.attrib["bandwidth"])
+        
+        is_pointcloud = content_type.lower() == "pointcloud"
+        
+        if is_pointcloud:
+            x_pos = float(tree.attrib.get("xPos", 0))
+            y_pos = float(tree.attrib.get("yPos", 0))
+            z_pos = float(tree.attrib.get("zPos", 0))
+            x_rot = float(tree.attrib.get("xRot", 0))
+            y_rot = float(tree.attrib.get("yRot", 0))
+            z_rot = float(tree.attrib.get("zRot", 0))
+        else:
+            x_pos = y_pos = z_pos = 0
+            x_rot = y_rot = z_rot = 0
+            width = int(tree.attrib["width"])
+            height = int(tree.attrib["height"])
+
+        representation_base_url = ""
+        base_url_element = tree.find("BaseURL")
+        if base_url_element is not None:
+            representation_base_url = base_url_element.text or ""
+
+        full_base_url = base_url + representation_base_url
+
+        assert segment_template is not None, "Segment Template not found in representation"
+
+        initialization = segment_template.attrib["initialization"]
+        initialization = initialization.replace("$RepresentationID$", id_)
+        initialization = full_base_url + initialization
+        segments: Dict[int, Segment] = {}
+
+        timescale = int(segment_template.attrib["timescale"])
+        media = segment_template.attrib["media"].replace("$RepresentationID$", id_)
+        start_number = int(segment_template.attrib["startNumber"])
+
+        segment_timeline = segment_template.find("SegmentTimeline")
+        if segment_timeline is not None:
+            num = start_number
+            start_time = 0
+            for segment in segment_timeline:
+                duration = float(segment.attrib["d"]) / timescale
+                url = full_base_url + re.sub(r"\$Number(%\d+d)\$", r"\1", media) % num
+                if "t" in segment.attrib:
+                    start_time = float(segment.attrib["t"]) / timescale
+                segments[num] = Segment(url, initialization, duration, start_time, as_id, int(id_))
+                num += 1
+                start_time += duration
+
+                if "r" in segment.attrib:  # repeat
+                    for _ in range(int(segment.attrib["r"])):
+                        url = full_base_url + self.var_repl(media, {"Number": num})
+                        segments[num] = Segment(url, initialization, duration, start_time, as_id, int(id_))
+                        num += 1
+                        start_time += duration
+        else:
+            # GPAC DASH format
+            num = start_number
+            start_time = 0
+            num_segments = ceil((media_presentation_duration * timescale) / int(segment_template.attrib["duration"]))
+            duration = float(segment_template.attrib["duration"]) / timescale
+            self.log.debug(f"{num_segments=}, {duration=}")
+            for _ in range(num_segments):
+                url = full_base_url + self.var_repl(media, {"Number": num})
+                segments[num] = Segment(url, initialization, duration, start_time, as_id, int(id_))
+                num += 1
+                start_time += duration
+            # self.log.debug(segments)
+
+        if is_pointcloud:
+            return Representation(int(id_), mime, codec, bandwidth, x_pos, y_pos, initialization, segments, tree.attrib,
+                                z_pos=z_pos, x_rot=x_rot, y_rot=y_rot, z_rot=z_rot)
+        else:
+            return Representation(int(id_), mime, codec, bandwidth, width, height, initialization, segments, tree.attrib)
+
+    @staticmethod
+    def var_repl(s: str, vars: Dict[str, int | str]):
+        def _repl(m) -> str:
+            m = m.group()[1:-1]
+            if m in vars:
+                return str(vars[m])
+            elif "%" in m:
+                v, p = m.split("%", 1)
+                return f"%{p}" % vars[v]
+            else:
+                raise Exception(f"Cannot replace {m} in {s}")
+
+        return re.sub(r"\$.*\$", _repl, s)

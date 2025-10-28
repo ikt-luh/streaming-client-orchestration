@@ -1,0 +1,15 @@
+services:
+  istream_player:
+    image: pyrabbit-player:latest
+    container_name: "istream_player_${ID}"
+    volumes:
+      - .:/src:z
+      - ./control:/app/control:z
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      ID: ${ID:-0}
+      EXP_STR: ${EXP_STR:-}
+      CONTROL_FILE: /app/control/run.flag
+      LAMDA: ${LAMDA:-0.5}
+      NODE_ID: ${NODE_ID:-0}
