@@ -33,8 +33,6 @@ just start-experiment <path_to_config>
 ```
 you can find an [example config](./configs/experiment1_node1.yaml) for the parameters.
 
-With the following arguments:
-- number_of_containers: Number of clients 
 
 
 
