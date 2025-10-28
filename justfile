@@ -14,11 +14,11 @@ start-player ID:
 test-player:
 	docker compose -f docker-compose.player.yaml run --rm --service-ports --entrypoint /bin/sh istream_player
 
-test-csv EXP_DURATION LAMDA CSV_FILE:
-	python3 starting_script.py --count 1 --exp_duration {{EXP_DURATION}} --lamda {{LAMDA}} --csv_file {{CSV_FILE}}
+start-experiment CONFIG_PATH:
+	python3 starting_script.py --config {{CONFIG_PATH}} 
 
-test-bandwidth EXP_DURATION LAMDA BANDWIDTH:
-	python3 starting_script.py --count 1 --exp_duration {{EXP_DURATION}} --lamda {{LAMDA}} --bandwidth {{BANDWIDTH}}
+download-bw-traces:
+	wget https://github.com/uccmisl/5Gdataset/raw/refs/heads/master/5G-production-dataset.zip && \
+	unzip 5G-production-dataset.zip && \
+	rm 5G-production-dataset.zip 
 
-start-experiment COUNT EXP_DURATION LAMDA TARGET_BANDWIDTH_CSV NODE_ID:
-	python3 starting_script.py --count {{COUNT}} --exp_duration {{EXP_DURATION}} --lamda {{LAMDA}} --target_bandwidth_csv {{TARGET_BANDWIDTH_CSV}} --node_id {{NODE_ID}}

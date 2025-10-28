@@ -1,0 +1,7 @@
+node_id: 1 #ID of the host node
+n_containers: 5
+duration: 600 # in seconds
+sleep_lambda: 0.1 # Lambda value for exponential distr, E[sleep_time] = 1/lambda
+target_bandwidth: 500000 #Avg Bandwdith of clients (in kbit/s)
+istream_player_config_path: ./ressources/online.yaml
+csv_bandwidth_traces_path: ./5G-production-dataset/Download/Static/

@@ -1,3 +1,4 @@
+import yaml
 import os
 import subprocess
 from pathlib import Path
@@ -5,7 +6,6 @@ import re
 import time
 import argparse
 
-csv_bandwidth_dir = "../5G-production-dataset/5G-production-dataset/Download/Static/"
 control_file = Path("control/run.flag")
 
 # create folder for experiment
@@ -37,20 +37,18 @@ def wait_for_container_startup(prefixes):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--count', type=int, required=True, help='number of containers')
-    parser.add_argument('--exp_duration', type=int, required=True, help='experiment duration in seconds')
-    parser.add_argument('--lamda', type=str, required=True, help='lambda parameter for exponential distribution')
-    parser.add_argument('--csv_file', type=Path, default=None, help='csv files for bandwidth control')
-    parser.add_argument('--bandwidth', type=int, default=None, help='static bandwidth value in kbit/s')
-    parser.add_argument('--target_bandwidth_csv', type=int, default=None, help='average bandwidth to which csv profiles are scaled')
-    parser.add_argument('--node_id', type=int, default=0, help='id of node')
+    parser.add_argument('--config', type=str, required=True, help='Path to the yaml config')
     
     args = parser.parse_args()
-    
-    count = args.count
-    exp_duration = args.exp_duration
-    lamda = args.lamda
-    node_id = args.node_id
+
+    config_path = args.config
+    with open(config_path) as stream:
+        config = yaml.safe_load(stream)
+
+    count = config["n_containers"]
+    exp_duration = config["duration"]
+    lamda = config["sleep_lambda"]
+    node_id = config["node_id"]
         
     base_logs = Path("./logs")
     exp_dir, exp_str = get_next_experiment_dir(base_logs)
@@ -59,10 +57,8 @@ def main():
     control_file.parent.mkdir(exist_ok=True)
     control_file.write_text("1")
         
-    if args.csv_file:
-        csv_bandwidth_list = [str(args.csv_file)]
-    else:
-        csv_bandwidth_list = [str(p) for p in Path(csv_bandwidth_dir).iterdir() if p.is_file()]
+    csv_bandwidth_list = [str(p) for p in Path(config["csv_bandwidth_traces_path"]).iterdir() if p.is_file()]
+    print(csv_bandwidth_list)
                     
     for i in range(count):
         log_dir = exp_dir / str(i)
@@ -73,7 +69,7 @@ def main():
         env["ID"] = str(i)
         env["EXP_STR"] = exp_str
         env["LOG_DIR"] = str(log_dir.resolve())
-        env["LAMDA"] = lamda
+        env["LAMDA"] = str(lamda)
         env["NODE_ID"] = str(node_id)
         
         # start container
@@ -82,24 +78,18 @@ def main():
             "docker-compose.player.yaml", "-p",
             f"istream_player_{i}", "up", "-d",
             "--no-build", "--no-recreate", "--remove-orphans"]
+        print(docker_args)
         subprocess.run(docker_args, env=env)
 
     prefixes = [f"istream_player_{i}" for i in range(count)]
     wait_for_container_startup(prefixes)
-    
-    if args.bandwidth:
-        tc_proc = subprocess.Popen([
-            "python3", "tc_bandwidth_control.py", 
-            "--count", str(count), 
-            "--bandwidth", str(args.bandwidth)
-        ])
-    else:
-        tc_proc = subprocess.Popen([
-            "python3", "tc_bandwidth_control.py", 
-            "--count", str(count),
-            "--target-bandwidth-csv", str(args.target_bandwidth_csv),
-            "--csv-files"] + csv_bandwidth_list
-        )
+
+    tc_proc = subprocess.Popen([
+        "python3", "tc_bandwidth_control.py", 
+        "--count", str(count),
+        "--target-bandwidth-csv", str(config["target_bandwidth"]),
+        "--csv-files"] + csv_bandwidth_list
+    )
     try:
         # start timer
         print(f"starting experiment: {exp_duration}s")

@@ -1,32 +1,62 @@
 # Dash Emulator Universal
+This is an extension of iStreamPlayer for large scale streaming experiments in the RABBIT@Scale Project for SPIRIT.
+Find the original iStreamPlayer [here](https://github.com/NetMedia-Sys-Lab/istream-player).
 
-This version of the DASH Headless Player can play dash videos over several different configurations.
+This repository contains code to run an ensemble of Docker containers for Streaming V-PCC encoded content from a DASH media server.
 
-## Supported Features
-
-- 360 degree videos
-- Live Streaming
-- QUIC and TCP supported
-- Streaming from local file system
-- Bandwidth throttled streaming
-- 3 different ABR algorithms - Bandwidth-based, Buffer-based and Hybrid
-- Downloaded file saver
-- Statistics Collector
-- 2 different BW Estimation methods - Segment-based and instantaneous
-
-## System Requirements
-- Python >= 3.8
-- `docker`  
+# Setup
+TODO: Write scripts for that.
+- Python >= 3.8 TODO
+- `docker`  TODO
 - `iproute2` (for traffic shaping via `tc`)  
 - `sudo` access for network control 
+- just TODO
 
-## Add sudo rule
 To allow traffic shaping without password prompt:
+
 ```bash
 sudo visudo
 your_username ALL=(ALL) NOPASSWD: /usr/sbin/tc
 your_username ALL=(ALL) NOPASSWD: /usr/sbin/ip
 ```
+
+Download the 5G dataset:
+```bash
+    just download-bw-traces
+```
+
+
+## Running Experiments
+A streaming Experiment with N Clients can be started through
+```bash
+just start-experiment <path_to_config>
+```
+you can find an [example config](./configs/experiment1_node1.yaml) for the parameters.
+
+With the following arguments:
+- number_of_containers: Number of clients 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ## How to build
 
 ```bash
@@ -34,7 +64,7 @@ your_username ALL=(ALL) NOPASSWD: /usr/sbin/ip
 pip install .
 ```
 
-### How to Run
+## Running
 ```bash
 just start-experiment <number_of_containers> <duration_in_seconds> <lambda_of_distribution> <target_bandwidth> <id of node>
 ```
