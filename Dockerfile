@@ -22,6 +22,4 @@ COPY setup.py .
 
 RUN pip install .
 
-#ENTRYPOINT ["sh", "-c", "python3 /src/wrapper.py online; tail -f /dev/null"]
-
-ENTRYPOINT ["python3", "/src/wrapper.py", "online"]
+ENTRYPOINT ["python3", "/src/wrapper.py"]

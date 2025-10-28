@@ -18,41 +18,13 @@ lamda = os.environ.get("LAMDA", "")
 control_file = Path(os.getenv("CONTROL_FILE", "/app/control/run.flag"))
 ready_file = Path("control/ready.flag")
 node_id = os.environ.get("NODE_ID", "")
+config_path = os.environ.get("ISTREAM_CONFIG", ".ressources/online.yaml")
 
 class Wrapper:
     def __init__(self):
         self.config_dir = Path(__file__).parent / "resources"
-        self.config_dir.mkdir(exist_ok=True)
-        self.create_default_configs()
         self.random = random.seed(f"{container_id}{node_id}")
         self.node_logged = False
-
-    def create_default_configs(self):
-        default_config = {
-            "input": "http://localhost:8000/output.mpd",
-            "run_dir": "./logs",
-            "time_factor": 1.0,
-            "mod_downloader": "tcp",
-            "mod_bw": "bw_meter",
-            "mod_abr": "dash",
-            "mod_scheduler": "scheduler",
-            "mod_buffer": "buffer_manager",
-            "mod_analyzer": ["data_collector"],
-            "verbose": True,
-            "buffer_duration": 8.0,
-            "safe_buffer_level": 6.0,
-            "panic_buffer_level": 2.5,
-            "min_rebuffer_duration": 2.0,
-            "min_start_duration": 2.0,
-        }
-
-        configs = {"default.yaml": default_config}
-
-        for filename, config in configs.items():
-            config_path = self.config_dir / filename
-            if not config_path.exists():
-                with open(config_path, "w") as f:
-                    yaml.dump(config, f, default_flow_style=False, indent=2)
 
     def load_env_overrides(self) -> Dict[str, Any]:
         """Load configuration overrides from environment variables"""
@@ -98,10 +70,6 @@ class Wrapper:
                     env_config[config_key] = value
 
         return env_config
-
-    def run_with_config_name(self, config_name: str, overrides: Dict[str, Any] = None):
-        config_file = self.config_dir / f"{config_name}.yaml"
-        self.run_with_config_file(str(config_file), overrides)
 
     # draw random value for sleep time duration between sessions
     def generate_sleep_time(self) -> float:
@@ -160,6 +128,7 @@ class Wrapper:
         asyncio.run(composer.run(config)) # run session
 
 
+"""
 def parse_overrides(args):
     overrides = {}
 
@@ -175,6 +144,7 @@ def parse_overrides(args):
             overrides[key] = value
 
     return overrides
+"""
 
 # log extra info of session
 def log_session(path: str, timestamp: float = None, sleep_duration: float = None, node_id: str = None):
@@ -200,24 +170,16 @@ def log_session(path: str, timestamp: float = None, sleep_duration: float = None
 
 def main():
     wrapper = Wrapper()
-
-    if len(sys.argv) < 2:
-        # default behavior
-        wrapper.run_with_config_name("default")
-        return
-
-    first_arg = sys.argv[1]
-    config_name = first_arg
-    overrides = parse_overrides(sys.argv[2:])
     
+    # Loop for running multiple streaming sessions in one experiment
     while True: 
-        
-        # stop restarting the session
+        # Check if the experiment is still active
         if not control_file.exists() or control_file.read_text().strip() != "1":
             print("stop container loop")
             break
         
-        wrapper.run_with_config_name(config_name, overrides)
+        # Run new streaming session
+        wrapper.run_with_config_file(config_path)
 
 
 if __name__ == "__main__":

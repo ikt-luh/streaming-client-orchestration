@@ -49,6 +49,7 @@ def main():
     exp_duration = config["duration"]
     lamda = config["sleep_lambda"]
     node_id = config["node_id"]
+    istream_player_config_path = config["istream_player_config_path"]
         
     base_logs = Path("./logs")
     exp_dir, exp_str = get_next_experiment_dir(base_logs)
@@ -71,6 +72,7 @@ def main():
         env["LOG_DIR"] = str(log_dir.resolve())
         env["LAMDA"] = str(lamda)
         env["NODE_ID"] = str(node_id)
+        env["ISTREAM_CONFIG"] = str(istream_player_config_path)
         
         # start container
         docker_args = [
@@ -78,7 +80,6 @@ def main():
             "docker-compose.player.yaml", "-p",
             f"istream_player_{i}", "up", "-d",
             "--no-build", "--no-recreate", "--remove-orphans"]
-        print(docker_args)
         subprocess.run(docker_args, env=env)
 
     prefixes = [f"istream_player_{i}" for i in range(count)]
