@@ -203,3 +203,5 @@ venv/
 dataset/
 runs/
 server
+
+__MACOSX
