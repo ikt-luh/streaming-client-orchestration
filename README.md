@@ -5,6 +5,30 @@ Find the original iStreamPlayer [here](https://github.com/NetMedia-Sys-Lab/istre
 This repository contains code to run an ensemble of Docker containers for Streaming V-PCC encoded content from a DASH media server.
 
 # Setup
+Python
+```bash
+sudo apt update
+sudo apt install -y python3 python3-pip python3-venv ca-certificates curl gnupg lsb-release
+
+# Docker
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
+  sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+
+echo \
+  "deb [arch=$(dpkg --print-architecture) \
+  signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/ubuntu \
+  $(lsb_release -cs) stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+# IP Route
+sudo apt install -y iproute2
+```
+
 TODO: Write scripts for that.
 - Python >= 3.8 TODO
 - `docker`  TODO
