@@ -1,6 +1,7 @@
 import sys
 import os
 import yaml
+import subprocess
 from pathlib import Path
 from typing import Dict, Any
 from istream_player.config.config import PlayerConfig
@@ -11,6 +12,9 @@ import logging
 import random
 import time
 import json
+
+TC_BIN = "/sbin/tc"
+
 
 container_id = os.environ.get("ID", "")
 container_exp = os.environ.get("EXP_STR", "")
@@ -23,9 +27,15 @@ config_path = os.environ.get("ISTREAM_CONFIG", ".ressources/online.yaml")
 class Wrapper:
     def __init__(self):
         self.config_dir = Path(__file__).parent / "resources"
-        self.random = random.seed(f"{container_id}{node_id}")
         self.node_logged = False
+        self.bw_min = int(os.getenv("BANDWIDTH_MIN", "500"))     # kbps
+        self.bw_max = int(os.getenv("BANDWIDTH_MAX", "5000"))    # kbps
+        random.seed(f"{container_id}{node_id}")
 
+    def generate_bandwidth(self) -> int:
+        """Draw random bandwidth in kbps for this session"""
+        return random.randint(self.bw_min, self.bw_max)
+    
     def load_env_overrides(self) -> Dict[str, Any]:
         """Load configuration overrides from environment variables"""
         env_config = {}
@@ -76,78 +86,55 @@ class Wrapper:
             return random.expovariate(float(lamda))
         
     def run_with_config_file(self, config_file: str, overrides: Dict[str, Any] = None):
-        
         composer = PlayerComposer()
         composer.register_core_modules()
         config = PlayerConfig()
 
-        print(f"loading configuration from: {config_file}")
         load_from_config_file(config_file, config)
-
         env_overrides = self.load_env_overrides()
-        
+
         if container_id != "" and container_exp != "":
             base_run_dir = env_overrides.get("run_dir", getattr(config, "run_dir", "./logs"))
             env_overrides["run_dir"] = os.path.join(base_run_dir, container_exp, container_id)
-            
-        sleep_time = self.generate_sleep_time()
-    
-        if env_overrides:
-            print(f"applying environment overrides: {list(env_overrides.keys())}")
-            load_from_dict(env_overrides, config)
 
+        # pick bandwidth and sleep time for this session
+        sleep_time = self.generate_sleep_time()
+        bandwidth_kbps = self.generate_bandwidth()
+
+        # apply bandwidth limit locally
+        set_bandwidth_limit(bandwidth_kbps)
+
+        if env_overrides:
+            load_from_dict(env_overrides, config)
         if overrides:
-            print(f"applying command line overrides: {list(overrides.keys())}")
             load_from_dict(overrides, config)
 
-        verbose = getattr(config, "verbose", False)
-        if verbose:
-            logging.basicConfig(
-                level=logging.DEBUG,
-                format="%(asctime)s %(name)20s %(levelname)8s:\t%(message)s",
-            )
-        else:
-            logging.basicConfig(
-                level=logging.INFO,
-                format="%(asctime)s %(name)20s %(levelname)8s:\t%(message)s",
-            )
         config.validate()
-        print(f"starting player with input: {getattr(config, 'input', 'N/A')}")
-        
-        # wait for tc bandwidth control skript to signal readiness
+        verbose = getattr(config, "verbose", False)
+        logging.basicConfig(
+            level=logging.DEBUG if verbose else logging.INFO,
+            format="%(asctime)s %(name)20s %(levelname)8s:\t%(message)s",
+        )
+
+        # wait for readiness flag
         while True:
             if ready_file.exists() and ready_file.read_text().strip() == "1":
-                print("waiting for ready flag")
                 break
             time.sleep(0.1)
+
+        # log metadata including bandwidth
         if not self.node_logged and node_id:
-            log_session(env_overrides["run_dir"],node_id=node_id)
+            log_session(env_overrides["run_dir"], node_id=node_id)
             self.node_logged = True
-        log_session(env_overrides["run_dir"], time.time(), sleep_time)
-        time.sleep(sleep_time) # wait for random the random time
-        asyncio.run(composer.run(config)) # run session
+        log_session(env_overrides["run_dir"], time.time(), sleep_time, bandwidth_kbps)
 
+        time.sleep(sleep_time)
+        asyncio.run(composer.run(config))
 
-"""
-def parse_overrides(args):
-    overrides = {}
-
-    for arg in args:
-        if arg.startswith("--") and "=" in arg:
-            key, value = arg[2:].split("=", 1)
-
-            if value.lower() in ["true", "false"]:
-                value = value.lower() == "true"
-            elif value.replace(".", "").replace("-", "").isdigit():
-                value = float(value) if "." in value else int(value)
-
-            overrides[key] = value
-
-    return overrides
-"""
 
 # log extra info of session
-def log_session(path: str, timestamp: float = None, sleep_duration: float = None, node_id: str = None):
+def log_session(path: str, timestamp: float = None, sleep_duration: float = None,
+                bandwidth_kbps: int = None, node_id: str = None):
     filepath = os.path.join(path, "info.json")
     os.makedirs(path, exist_ok=True)
 
@@ -160,13 +147,54 @@ def log_session(path: str, timestamp: float = None, sleep_duration: float = None
     if node_id and "node_id" not in data:
         data["node_id"] = node_id
     elif timestamp is not None and sleep_duration is not None:
-        data.setdefault("sessions", []).append({
-            "timestamp": timestamp,
-            "sleep_duration": sleep_duration
-        })
+        entry = {"timestamp": timestamp, "sleep_duration": sleep_duration}
+        if bandwidth_kbps is not None:
+            entry["bandwidth_kbps"] = bandwidth_kbps
+        data.setdefault("sessions", []).append(entry)
 
     with open(filepath, "w") as f:
         json.dump(data, f)
+
+
+
+def set_bandwidth_limit(bandwidth_kbps: int):
+    """
+    Apply bandwidth limit (in kbps) using Linux tc in the container.
+    Assumes 'eth0' as the active interface.
+    """
+    iface = "eth0"
+    ifb = "ifb0"
+    rate = f"{bandwidth_kbps}kbit"
+
+    try:
+                # clean existing
+        subprocess.run([TC_BIN, "qdisc", "del", "dev", iface, "root"], stderr=subprocess.DEVNULL)
+        subprocess.run([TC_BIN, "qdisc", "del", "dev", ifb, "root"], stderr=subprocess.DEVNULL)
+        subprocess.run(["ip", "link", "set", ifb, "down"], stderr=subprocess.DEVNULL)
+
+        # setup ifb
+        subprocess.run(["modprobe", "ifb", "numifbs=1"], check=False)
+        subprocess.run(["ip", "link", "set", "dev", ifb, "up"], check=True)
+        subprocess.run([TC_BIN, "qdisc", "add", "dev", iface, "handle", "ffff:", "ingress"], check=True)
+        subprocess.run([
+            TC_BIN, "filter", "add", "dev", iface, "parent", "ffff:", "protocol", "ip",
+            "u32", "match", "u32", "0", "0", "action", "mirred", "egress", "redirect", "dev", ifb
+        ], check=True)
+
+        # apply both
+        subprocess.run([
+            TC_BIN, "qdisc", "add", "dev", iface, "root", "tbf",
+            "rate", rate, "burst", "32kbit", "latency", "400ms"
+        ], check=True)
+        subprocess.run([
+            TC_BIN, "qdisc", "add", "dev", ifb, "root", "tbf",
+            "rate", rate, "burst", "32kbit", "latency", "400ms"
+        ], check=True)
+
+        print(f"[bandwidth] Set limit {rate} on {iface} (egress) and {ifb} (ingress)")
+    except subprocess.CalledProcessError as e:
+        print(f"[bandwidth] Failed to set limit: {e}")
+
 
 def main():
     wrapper = Wrapper()

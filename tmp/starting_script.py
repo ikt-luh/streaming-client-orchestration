@@ -1,0 +1,119 @@
+import yaml
+import os
+import subprocess
+from pathlib import Path
+import re
+import time
+import argparse
+
+control_file = Path("control/run.flag")
+
+# create folder for experiment
+def get_next_experiment_dir(base: Path) -> Path:
+    base.mkdir(exist_ok=True)
+    max_idx = -1
+    pattern = re.compile(r"^experiment_(\d+)$")
+
+    for d in base.iterdir():
+        if d.is_dir():
+            m = pattern.match(d.name)
+            if m:
+                idx = int(m.group(1))
+                max_idx = max(max_idx, idx)
+
+    next_idx = max_idx + 1
+    new_dir = base / f"experiment_{next_idx}"
+    new_dir.mkdir(exist_ok=True)
+    return new_dir, f"experiment_{next_idx}"
+
+# wait until all containers are online
+def wait_for_container_startup(prefixes):
+    while True:
+        result = subprocess.run(["docker", "ps", "--format", "{{.Names}}"],capture_output=True, text=True)
+        running = result.stdout.strip().splitlines()
+        if all(any(name.startswith(prefix) for name in running) for prefix in prefixes):
+                return
+        time.sleep(0.1)
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', type=str, required=True, help='Path to the yaml config')
+    
+    args = parser.parse_args()
+
+    config_path = args.config
+    with open(config_path) as stream:
+        config = yaml.safe_load(stream)
+
+    count = config["n_containers"]
+    exp_duration = config["duration"]
+    lamda = config["sleep_lambda"]
+    node_id = config["node_id"]
+    istream_player_config_path = config["istream_player_config_path"]
+        
+    base_logs = Path("./logs")
+    exp_dir, exp_str = get_next_experiment_dir(base_logs)
+        
+    # set control flag
+    control_file.parent.mkdir(exist_ok=True)
+    control_file.write_text("1")
+        
+    csv_bandwidth_list = [str(p) for p in Path(config["csv_bandwidth_traces_path"]).iterdir() if p.is_file()]
+    print(csv_bandwidth_list)
+                    
+    for i in range(count):
+        log_dir = exp_dir / str(i)
+        log_dir.mkdir(parents=True, exist_ok=True)
+        
+        # variables for container
+        env = os.environ.copy()
+        env["ID"] = str(i)
+        env["EXP_STR"] = exp_str
+        env["LOG_DIR"] = str(log_dir.resolve())
+        env["LAMDA"] = str(lamda)
+        env["NODE_ID"] = str(node_id)
+        env["ISTREAM_CONFIG"] = str(istream_player_config_path)
+        
+        # start container
+        docker_args = [
+            "docker", "compose", "-f",
+            "docker-compose.player.yaml", "-p",
+            f"istream_player_{i}", "up", "-d",
+            "--no-build", "--no-recreate", "--remove-orphans"]
+        subprocess.run(docker_args, env=env)
+
+    prefixes = [f"istream_player_{i}" for i in range(count)]
+    wait_for_container_startup(prefixes)
+
+    tc_proc = subprocess.Popen([
+        "python3", "tc_bandwidth_control.py", 
+        "--count", str(count),
+        "--target-bandwidth-csv", str(config["target_bandwidth"]),
+        "--csv-files"] + csv_bandwidth_list
+    )
+    try:
+        # start timer
+        print(f"starting experiment: {exp_duration}s")
+        time.sleep(exp_duration)
+
+    finally:
+        # reset control flag
+        control_file.write_text("0")
+
+        # stop container
+        for i in range(count):
+            project_name = f"istream_player_{i}"
+            docker_args = [
+                "docker", "compose",
+                "-f", "docker-compose.player.yaml",
+                "-p", project_name,
+                "down", "--remove-orphans"]
+            print(f"Closing {project_name}")
+            subprocess.run(docker_args)
+            
+        # stop bandwidth skript    
+        tc_proc.terminate()
+        tc_proc.wait()
+ 
+if __name__ == "__main__":
+    main()

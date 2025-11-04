@@ -1,4 +1,4 @@
-input: "http://host.docker.internal:8080/1s_segments/loot/loot.mpd" #host.docker.internal if starting from within container, else localhost
+input: "http://172.23.180.192:8081/loot/loot.mpd"
 run_dir: "./logs"
 
 time_factor: 1.0

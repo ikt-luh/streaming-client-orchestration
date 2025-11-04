@@ -15,7 +15,7 @@ test-player:
 	docker compose -f docker-compose.player.yaml run --rm --service-ports --entrypoint /bin/sh istream_player
 
 start-experiment CONFIG_PATH:
-	python3 starting_script.py --config {{CONFIG_PATH}} 
+	python3 network_emulation.py --config {{CONFIG_PATH}} 
 
 download-bw-traces:
 	wget https://github.com/uccmisl/5Gdataset/raw/refs/heads/master/5G-production-dataset.zip && \
