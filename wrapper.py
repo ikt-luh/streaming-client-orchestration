@@ -13,8 +13,6 @@ import random
 import time
 import json
 
-TC_BIN = "/sbin/tc"
-
 
 container_id = os.environ.get("ID", "")
 container_exp = os.environ.get("EXP_STR", "")
@@ -24,18 +22,15 @@ ready_file = Path("control/ready.flag")
 node_id = os.environ.get("NODE_ID", "")
 config_path = os.environ.get("ISTREAM_CONFIG", ".ressources/online.yaml")
 
+
 class Wrapper:
     def __init__(self):
         self.config_dir = Path(__file__).parent / "resources"
         self.node_logged = False
-        self.bw_min = int(os.getenv("BANDWIDTH_MIN", "500"))     # kbps
-        self.bw_max = int(os.getenv("BANDWIDTH_MAX", "5000"))    # kbps
+        self.exp_cfg = yaml.safe_load(open(os.environ["EXPERIMENT_CONFIG"]))
+        self.sequences = self.exp_cfg["sequences"]
         random.seed(f"{container_id}{node_id}")
 
-    def generate_bandwidth(self) -> int:
-        """Draw random bandwidth in kbps for this session"""
-        return random.randint(self.bw_min, self.bw_max)
-    
     def load_env_overrides(self) -> Dict[str, Any]:
         """Load configuration overrides from environment variables"""
         env_config = {}
@@ -81,28 +76,32 @@ class Wrapper:
 
         return env_config
 
-    # draw random value for sleep time duration between sessions
     def generate_sleep_time(self) -> float:
-            return random.expovariate(float(lamda))
-        
+        """Draw random value for sleep time duration between sessions"""
+        return random.expovariate(float(lamda))
+
     def run_with_config_file(self, config_file: str, overrides: Dict[str, Any] = None):
         composer = PlayerComposer()
         composer.register_core_modules()
         config = PlayerConfig()
 
-        load_from_config_file(config_file, config)
+        sequence = random.choice(self.sequences)
+
+        raw = Path(config_file).read_text()
+        raw = raw.replace("${SEQUENCE}", sequence)
+
+        tmp_cfg = "/tmp/resolved_config.yaml"
+        Path(tmp_cfg).write_text(raw)
+
+        load_from_config_file(tmp_cfg, config)
         env_overrides = self.load_env_overrides()
 
-        if container_id != "" and container_exp != "":
+        if container_id and container_exp:
             base_run_dir = env_overrides.get("run_dir", getattr(config, "run_dir", "./logs"))
             env_overrides["run_dir"] = os.path.join(base_run_dir, container_exp, container_id)
 
-        # pick bandwidth and sleep time for this session
+        # compute sleep time
         sleep_time = self.generate_sleep_time()
-        bandwidth_kbps = self.generate_bandwidth()
-
-        # apply bandwidth limit locally
-        set_bandwidth_limit(bandwidth_kbps)
 
         if env_overrides:
             load_from_dict(env_overrides, config)
@@ -122,19 +121,18 @@ class Wrapper:
                 break
             time.sleep(0.1)
 
-        # log metadata including bandwidth
+        # log metadata
         if not self.node_logged and node_id:
             log_session(env_overrides["run_dir"], node_id=node_id)
             self.node_logged = True
-        log_session(env_overrides["run_dir"], time.time(), sleep_time, bandwidth_kbps)
+        log_session(env_overrides["run_dir"], time.time(), sleep_time)
 
         time.sleep(sleep_time)
         asyncio.run(composer.run(config))
 
 
-# log extra info of session
 def log_session(path: str, timestamp: float = None, sleep_duration: float = None,
-                bandwidth_kbps: int = None, node_id: str = None):
+                node_id: str = None):
     filepath = os.path.join(path, "info.json")
     os.makedirs(path, exist_ok=True)
 
@@ -148,65 +146,19 @@ def log_session(path: str, timestamp: float = None, sleep_duration: float = None
         data["node_id"] = node_id
     elif timestamp is not None and sleep_duration is not None:
         entry = {"timestamp": timestamp, "sleep_duration": sleep_duration}
-        if bandwidth_kbps is not None:
-            entry["bandwidth_kbps"] = bandwidth_kbps
         data.setdefault("sessions", []).append(entry)
 
     with open(filepath, "w") as f:
         json.dump(data, f)
 
 
-
-def set_bandwidth_limit(bandwidth_kbps: int):
-    """
-    Apply bandwidth limit (in kbps) using Linux tc in the container.
-    Assumes 'eth0' as the active interface.
-    """
-    iface = "eth0"
-    ifb = "ifb0"
-    rate = f"{bandwidth_kbps}kbit"
-
-    try:
-                # clean existing
-        subprocess.run([TC_BIN, "qdisc", "del", "dev", iface, "root"], stderr=subprocess.DEVNULL)
-        subprocess.run([TC_BIN, "qdisc", "del", "dev", ifb, "root"], stderr=subprocess.DEVNULL)
-        subprocess.run(["ip", "link", "set", ifb, "down"], stderr=subprocess.DEVNULL)
-
-        # setup ifb
-        subprocess.run(["modprobe", "ifb", "numifbs=1"], check=False)
-        subprocess.run(["ip", "link", "set", "dev", ifb, "up"], check=True)
-        subprocess.run([TC_BIN, "qdisc", "add", "dev", iface, "handle", "ffff:", "ingress"], check=True)
-        subprocess.run([
-            TC_BIN, "filter", "add", "dev", iface, "parent", "ffff:", "protocol", "ip",
-            "u32", "match", "u32", "0", "0", "action", "mirred", "egress", "redirect", "dev", ifb
-        ], check=True)
-
-        # apply both
-        subprocess.run([
-            TC_BIN, "qdisc", "add", "dev", iface, "root", "tbf",
-            "rate", rate, "burst", "32kbit", "latency", "400ms"
-        ], check=True)
-        subprocess.run([
-            TC_BIN, "qdisc", "add", "dev", ifb, "root", "tbf",
-            "rate", rate, "burst", "32kbit", "latency", "400ms"
-        ], check=True)
-
-        print(f"[bandwidth] Set limit {rate} on {iface} (egress) and {ifb} (ingress)")
-    except subprocess.CalledProcessError as e:
-        print(f"[bandwidth] Failed to set limit: {e}")
-
-
 def main():
     wrapper = Wrapper()
-    
     # Loop for running multiple streaming sessions in one experiment
-    while True: 
-        # Check if the experiment is still active
+    while True:
         if not control_file.exists() or control_file.read_text().strip() != "1":
             print("stop container loop")
             break
-        
-        # Run new streaming session
         wrapper.run_with_config_file(config_path)
 
 

@@ -49,7 +49,8 @@ def main():
     parser.add_argument("--config", required=True, help="Path to YAML config file")
     args = parser.parse_args()
 
-    with open(args.config) as f:
+    config_path = args.config
+    with open(config_path) as f:
         cfg = yaml.safe_load(f)
 
     # === Extract config ===
@@ -90,6 +91,7 @@ def main():
             "ISTREAM_CONFIG": str(istream_config),
             "BANDWIDTH_MIN": str(bw_min),
             "BANDWIDTH_MAX": str(bw_max),
+            "EXPERIMENT_CONFIG": str(config_path),
         })
 
         cmd = [

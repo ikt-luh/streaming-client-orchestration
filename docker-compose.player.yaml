@@ -1,10 +1,35 @@
+version: "3.9"
+
 services:
+  switch:
+    build:
+      context: .
+      dockerfile: Switch.Dockerfile
+    container_name: "switch_${ID}"
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - BANDWIDTH_MIN=5000
+      - BANDWIDTH_MAX=40000 #kbps
+      - INTERVAL=1.0
+    networks:
+      - expnet
+
   istream_player:
-    image: pyrabbit-player:latest
+    build:
+      context: .
+      dockerfile: Player.Dockerfile
     container_name: "istream_player_${ID}"
+    depends_on:
+      - switch
+    cap_add:
+      - NET_ADMIN
+    networks:
+      - expnet
     volumes:
       - .:/src:z
       - ./control:/app/control:z
+      - ${EXPERIMENT_CONFIG}:/app/experiment_config.yaml:ro
     environment:
       ID: ${ID:-0}
       EXP_STR: ${EXP_STR:-}
@@ -12,11 +37,9 @@ services:
       LAMDA: ${LAMDA:-0.5}
       NODE_ID: ${NODE_ID:-0}
       ISTREAM_CONFIG: ${ISTREAM_CONFIG:-./resources/online.yaml}
-      BANDWIDTH_MIN: ${BANDWIDTH_MIN:-500}
-      BANDWIDTH_MAX: ${BANDWIDTH_MAX:-5000}
-    cap_add:
-      - NET_ADMIN
-    devices: 
-      - /dev/net/tun
-    working_dir: /src
-    entrypoint: ["python3", "/src/wrapper.py"]
+      EXPERIMENT_CONFIG: ${EXPERIMENT_CONFIG}
+    command: ["/src/start_player.sh"]
+
+networks:
+  expnet:
+    driver: bridge

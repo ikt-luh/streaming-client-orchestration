@@ -4,7 +4,6 @@ WORKDIR /src
 
 RUN apt-get update && \
     apt-get -y install \
-        linux-modules-extra-$(uname -r) \
         curl \
         gnupg2 \
         knot-dnsutils \
@@ -20,6 +19,7 @@ COPY istream_player istream_player
 COPY scripts scripts
 COPY setup.py .
 COPY wrapper.py wrapper.py
+COPY start_player.sh start_player.sh
 
 RUN pip install .
 

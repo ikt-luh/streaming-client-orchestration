@@ -1,5 +1,5 @@
-input: "http://172.23.180.192:8081/loot/loot.mpd"
 run_dir: "./logs"
+input: "http://172.23.180.192:8081/${SEQUENCE}/${SEQUENCE}.mpd"
 
 time_factor: 1.0
 
@@ -14,10 +14,10 @@ mod_analyzer:
   - "data_collector"
   - "file_saver"
 
-buffer_duration: 8.0
-safe_buffer_level: 6.0
-panic_buffer_level: 2.5
+buffer_duration: 5.0
+safe_buffer_level: 4.0
+panic_buffer_level: 1.5
 min_rebuffer_duration: 2.0
 min_start_duration: 2.0
 
-verbose: true
+verbose: true 
