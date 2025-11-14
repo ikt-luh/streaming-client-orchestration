@@ -14,10 +14,10 @@ mod_analyzer:
   - "data_collector"
   - "file_saver"
 
-buffer_duration: 5.0
-safe_buffer_level: 4.0
-panic_buffer_level: 1.5
-min_rebuffer_duration: 2.0
-min_start_duration: 2.0
+buffer_duration: 12
+safe_buffer_level: 8
+panic_buffer_level: 2
+min_rebuffer_duration: 2
+min_start_duration: 3
 
 verbose: true 

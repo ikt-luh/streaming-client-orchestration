@@ -25,8 +25,5 @@ download-bw-traces:
 	unzip 5G-production-dataset.zip && \
 	rm 5G-production-dataset.zip 
 
-
 clean:
-    docker ps --format '\{\{.Names\}\}' \
-      | grep -E 'istream_player_|switch_' \
-      | xargs -r docker rm -f
+	docker stop $(docker ps -q)

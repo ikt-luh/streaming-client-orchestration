@@ -1,0 +1,12 @@
+node_id: 0 #ID of the host node
+n_containers: 16
+duration: 600 # in seconds
+sleep_lambda: 0.1 # Lambda value for exponential distr, E[sleep_time] = 1/lambda
+bandwidth_min: 20000 #Avg Bandwdith of clients (in kbit/s)
+bandwidth_max: 80000 #Avg Bandwdith of clients (in kbit/s)
+istream_player_config_path: ./resources/4s_segments.yaml
+sequences:
+  - "loot"
+  - "soldier"
+  - "longdress"
+  - "redandblack"
