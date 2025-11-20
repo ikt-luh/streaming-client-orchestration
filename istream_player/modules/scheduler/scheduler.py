@@ -87,8 +87,9 @@ class SchedulerImpl(Module, Scheduler):
         self.adaptation_sets = self.select_adaptation_sets(self.mpd_provider.mpd.adaptation_sets)
         # print(f"{self.adaptation_sets=}")
 
-        # Start from the min segment index
+        # Start from the min segment index  --old
         self._index = self.segment_limits(self.adaptation_sets)[0]
+        
         while True:
             # Check buffer level
             if self.buffer_manager.buffer_level > self.max_buffer_duration:

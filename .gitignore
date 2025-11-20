@@ -203,3 +203,10 @@ venv/
 dataset/
 runs/
 server
+
+__MACOSX
+
+*.zip
+control/
+logs/
+5G-production-dataset

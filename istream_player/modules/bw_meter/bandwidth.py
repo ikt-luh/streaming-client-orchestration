@@ -67,8 +67,21 @@ class BandwidthMeterImpl(Module, BandwidthMeter, DownloadEventListener, Schedule
         return self.stats[url]
 
     async def on_segment_download_complete(self, index: int, segments: Dict[int, Segment], stats: Dict[int, DownloadStats]):
-        curr_bw = 8 * self.total_bytes / (time.time() - self.start_time)
-        self._bw = self._bw * self.smooth_factor + curr_bw * (1 - self.smooth_factor)
+        # Changed bw meter computation
+        est_bws = []
+        for st in self.stats.values():
+            #if st.first_byte_at is None or st.last_byte_at is None:
+            if st.start_time is None or st.last_byte_at is None:
+                continue
+
+            duration = st.last_byte_at - st.first_byte_at
+            if duration > 0:
+                est_bws.append(8 * st.received_bytes / duration)
+        
+        if est_bws:
+            curr_bw = sum(est_bws) / len(est_bws)
+            self._bw = self._bw * self.smooth_factor + curr_bw * (1 - self.smooth_factor)
+
         for listener in self.listeners:
             await listener.on_bandwidth_update(self._bw)
 

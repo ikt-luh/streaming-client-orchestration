@@ -76,7 +76,8 @@ class DefaultMPDParser(MPDParser):
         base_url = os.path.dirname(url) + "/"
 
         for index, adaptation_set_xml in enumerate(period):
-            if adaptation_set_xml.attrib.get("contentType", "video").lower() == "video":
+            content_type = adaptation_set_xml.attrib.get("contentType", "video").lower()
+            if content_type in ["video", "pointcloud"]:
                 adaptation_set: AdaptationSet = self.parse_adaptation_set(
                     adaptation_set_xml, base_url, index, media_presentation_duration
                 )
@@ -90,14 +91,27 @@ class DefaultMPDParser(MPDParser):
         id_ = int(tree.attrib.get("id", str(index)))
         content_type = tree.attrib.get("contentType", "video")
         assert (
-            content_type == "video" or content_type == "audio"
-        ), f"Only 'video' or 'audio' content_type is supported, Got {content_type}"
+            content_type == "video" or content_type == "audio" or content_type == "pointcloud"
+        ), f"Only 'video', 'audio' or 'pointcloud' content_type is supported, Got {content_type}"
 
         frame_rate = tree.attrib.get("frameRate")
-        max_width = int(tree.attrib.get("maxWidth", 0))
-        max_height = int(tree.attrib.get("maxHeight", 0))
-        par = tree.attrib.get("par")
-        self.log.debug(f"{frame_rate=}, {max_width=}, {max_height=}, {par=}")
+        
+        if content_type == "pointcloud":
+            max_x_pos = float(tree.attrib.get("maxXPos", 0))
+            max_y_pos = float(tree.attrib.get("maxYPos", 0))
+            max_z_pos = float(tree.attrib.get("maxZPos", 0))
+            max_x_rot = float(tree.attrib.get("maxXRot", 0))
+            max_y_rot = float(tree.attrib.get("maxYRot", 0))
+            max_z_rot = float(tree.attrib.get("maxZRot", 0))
+            par = None  # Point clouds don't have pixel aspect ratio
+            self.log.debug(f"{frame_rate=}, {max_x_pos=}, {max_y_pos=}, {max_z_pos=}, {max_x_rot=}, {max_y_rot=}, {max_z_rot=}")
+        else:
+            max_x_pos = max_y_pos = max_z_pos = 0
+            max_x_rot = max_y_rot = max_z_rot = 0
+            max_width = int(tree.attrib.get("maxWidth", 0))
+            max_height = int(tree.attrib.get("maxHeight", 0))
+            par = tree.attrib.get("par")
+            self.log.debug(f"{frame_rate=}, {max_width=}, {max_height=}, {par=}")
 
         representations = {}
         # GPAC MPD has segment template inside adaptation set
@@ -105,37 +119,62 @@ class DefaultMPDParser(MPDParser):
 
         for representation_tree in tree.findall("Representation"):
             representation = self.parse_representation(
-                representation_tree, id_, base_url, segment_template, media_presentation_duration
+                representation_tree, id_, base_url, segment_template, media_presentation_duration, content_type
             )
             representations[representation.id] = representation
-        return AdaptationSet(int(id_), content_type, frame_rate, max_width, max_height, par, representations, tree.attrib)
+            
+        if content_type == "pointcloud":
+            return AdaptationSet(int(id_), content_type, frame_rate, max_x_pos, max_y_pos, par, representations, tree.attrib, 
+                               max_z_pos=max_z_pos, max_x_rot=max_x_rot, max_y_rot=max_y_rot, max_z_rot=max_z_rot)
+        else:
+            return AdaptationSet(int(id_), content_type, frame_rate, max_width, max_height, par, representations, tree.attrib)
 
     def parse_representation(
-        self, tree: Element, as_id: int, base_url, segment_template: Optional[Element], media_presentation_duration: float
+        self, tree: Element, as_id: int, base_url, segment_template: Optional[Element], media_presentation_duration: float, content_type: str = "video"
     ) -> Representation:
         segment_template = tree.find("SegmentTemplate") or segment_template
         if segment_template is not None:
             return self.parse_representation_with_segment_template(
-                tree, as_id, base_url, segment_template, media_presentation_duration
+                tree, as_id, base_url, segment_template, media_presentation_duration, content_type
             )
         else:
             raise MPDParsingException("The MPD support is not complete yet")
 
     def parse_representation_with_segment_template(
-        self, tree: Element, as_id: int, base_url, segment_template: Element, media_presentation_duration: float
+        self, tree: Element, as_id: int, base_url, segment_template: Element, media_presentation_duration: float, content_type: str = "video"
     ) -> Representation:
         id_ = tree.attrib["id"]
         mime = tree.attrib["mimeType"]
         codec = tree.attrib["codecs"]
         bandwidth = int(tree.attrib["bandwidth"])
-        width = int(tree.attrib["width"])
-        height = int(tree.attrib["height"])
+        
+        is_pointcloud = content_type.lower() == "pointcloud"
+        
+        if is_pointcloud:
+            x_pos = float(tree.attrib.get("xPos", 0))
+            y_pos = float(tree.attrib.get("yPos", 0))
+            z_pos = float(tree.attrib.get("zPos", 0))
+            x_rot = float(tree.attrib.get("xRot", 0))
+            y_rot = float(tree.attrib.get("yRot", 0))
+            z_rot = float(tree.attrib.get("zRot", 0))
+        else:
+            x_pos = y_pos = z_pos = 0
+            x_rot = y_rot = z_rot = 0
+            width = int(tree.attrib["width"])
+            height = int(tree.attrib["height"])
+
+        representation_base_url = ""
+        base_url_element = tree.find("BaseURL")
+        if base_url_element is not None:
+            representation_base_url = base_url_element.text or ""
+
+        full_base_url = base_url + representation_base_url
 
         assert segment_template is not None, "Segment Template not found in representation"
 
         initialization = segment_template.attrib["initialization"]
         initialization = initialization.replace("$RepresentationID$", id_)
-        initialization = base_url + initialization
+        initialization = full_base_url + initialization
         segments: Dict[int, Segment] = {}
 
         timescale = int(segment_template.attrib["timescale"])
@@ -148,7 +187,7 @@ class DefaultMPDParser(MPDParser):
             start_time = 0
             for segment in segment_timeline:
                 duration = float(segment.attrib["d"]) / timescale
-                url = base_url + re.sub(r"\$Number(%\d+d)\$", r"\1", media) % num
+                url = full_base_url + re.sub(r"\$Number(%\d+d)\$", r"\1", media) % num
                 if "t" in segment.attrib:
                     start_time = float(segment.attrib["t"]) / timescale
                 segments[num] = Segment(url, initialization, duration, start_time, as_id, int(id_))
@@ -157,7 +196,7 @@ class DefaultMPDParser(MPDParser):
 
                 if "r" in segment.attrib:  # repeat
                     for _ in range(int(segment.attrib["r"])):
-                        url = base_url + self.var_repl(media, {"Number": num})
+                        url = full_base_url + self.var_repl(media, {"Number": num})
                         segments[num] = Segment(url, initialization, duration, start_time, as_id, int(id_))
                         num += 1
                         start_time += duration
@@ -169,13 +208,17 @@ class DefaultMPDParser(MPDParser):
             duration = float(segment_template.attrib["duration"]) / timescale
             self.log.debug(f"{num_segments=}, {duration=}")
             for _ in range(num_segments):
-                url = base_url + self.var_repl(media, {"Number": num})
+                url = full_base_url + self.var_repl(media, {"Number": num})
                 segments[num] = Segment(url, initialization, duration, start_time, as_id, int(id_))
                 num += 1
                 start_time += duration
             # self.log.debug(segments)
 
-        return Representation(int(id_), mime, codec, bandwidth, width, height, initialization, segments, tree.attrib)
+        if is_pointcloud:
+            return Representation(int(id_), mime, codec, bandwidth, x_pos, y_pos, initialization, segments, tree.attrib,
+                                z_pos=z_pos, x_rot=x_rot, y_rot=y_rot, z_rot=z_rot)
+        else:
+            return Representation(int(id_), mime, codec, bandwidth, width, height, initialization, segments, tree.attrib)
 
     @staticmethod
     def var_repl(s: str, vars: Dict[str, int | str]):

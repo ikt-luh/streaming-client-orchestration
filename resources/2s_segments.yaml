@@ -1,0 +1,23 @@
+run_dir: "./logs"
+input: "http://172.23.180.192:8081/${SEQUENCE}/${SEQUENCE}.mpd"
+
+time_factor: 1.0
+
+mod_mpd: "mpd"
+mod_downloader: "tcp"
+mod_bw: "bw_meter"
+mod_abr: "dash"
+mod_scheduler: "scheduler"
+mod_buffer: "buffer_manager"
+mod_player: "dash"
+mod_analyzer:
+  - "data_collector"
+  - "file_saver"
+
+buffer_duration: 12
+safe_buffer_level: 8
+panic_buffer_level: 2
+min_rebuffer_duration: 2
+min_start_duration: 3
+
+verbose: true 
