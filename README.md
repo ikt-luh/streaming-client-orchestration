@@ -1,8 +1,9 @@
-# Dash Emulator Universal
-This is an extension of iStreamPlayer for large scale streaming experiments in the RABBIT@Scale Project for SPIRIT.
-Find the original iStreamPlayer [here](https://github.com/NetMedia-Sys-Lab/istream-player).
+# DASH Client Emulation based on istream-player
+This is an extension of iStream-Player for streaming experiments in the RABBIT@Scale Project for SPIRIT.
+Find the original iStream-Player [here](https://github.com/NetMedia-Sys-Lab/istream-player).
 
-This repository contains code to run an ensemble of Docker containers for Streaming V-PCC encoded content from a DASH media server.
+This repository allows to deploy multiple DASH Clients running on the same device for streaming experiments.
+Each client is deployed in a container in conjunction with a switch container for link emulation. 
 
 # Setup
 Python
@@ -29,28 +30,10 @@ sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin d
 sudo apt install -y iproute2
 ```
 
-TODO: Write scripts for that.
-- Python >= 3.8 TODO
-- `docker`  TODO
-- `iproute2` (for traffic shaping via `tc`)  
-- `sudo` access for network control 
-- just TODO
 
-To allow traffic shaping without password prompt:
-
-```bash
-sudo visudo
-your_username ALL=(ALL) NOPASSWD: /usr/sbin/tc
-your_username ALL=(ALL) NOPASSWD: /usr/sbin/ip
-```
-
-Download the 5G dataset:
-```bash
-    just download-bw-traces
-```
-
-
-## Running Experiments
+# Running Experiments
+For running an experiment, adapt the experiment configurations in **./configs/**. 
+Each configuration requires to link a client configuration, an example can be found [here](./ressources/1s_segments.yaml) 
 A streaming Experiment with N Clients can be started through
 ```bash
 just start-experiment <path_to_config>
@@ -60,45 +43,3 @@ you can find an [example config](./configs/experiment1_node1.yaml) for the param
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## How to build
-
-```bash
-# Install package
-pip install .
-```
-
-## Running
-```bash
-just start-experiment <number_of_containers> <duration_in_seconds> <lambda_of_distribution> <target_bandwidth> <id of node>
-```
-
-### Testing modes
-```bash
-# start and open one container interactively
-just test-player
-
-# start one container and load a custom CSV bandwidth profile
-just test-csv <duration_in_seconds> <lambda> <path_to_csv_file>
-
-# start one container with a fixed static bandwidth
-just test-bandwidth <duration_in_seconds> <lambda> <bandwidth_in_kbit>
-```

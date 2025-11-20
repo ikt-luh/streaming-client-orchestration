@@ -6,16 +6,14 @@ build-player:
 	docker tag {{PLAYER_IMAGE}}:{{DOCKER_TAG}} player-base:{{DOCKER_TAG}}
 
 start-player ID:
-	docker compose -f docker-compose.player.yaml -p istream_player_{{ID}} up -d \
+	docker compose -f docker-compose.yaml -p istream_player_{{ID}} up -d \
 	--no-build \
 	--no-recreate \
 	--remove-orphans
 
 test-player:
-	docker compose -f docker-compose.player.yaml run --rm --service-ports --entrypoint /bin/sh istream_player
+	docker compose -f docker-compose.yaml run --rm --service-ports --entrypoint /bin/sh istream_player
 
-create-network:
-	docker network create expnet
 
 start-experiment CONFIG_PATH:
 	python3 run_experiment.py --config {{CONFIG_PATH}} 
