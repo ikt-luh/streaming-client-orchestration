@@ -10,8 +10,8 @@ from istream_player.core.scheduler import Scheduler, SchedulerEventListener
 from istream_player.models.mpd_objects import Segment
 
 
-@ModuleOption("bw_meter", default=True, requires=["segment_downloader", Scheduler])
-class BandwidthMeterImpl(Module, BandwidthMeter, DownloadEventListener, SchedulerEventListener):
+@ModuleOption("bw_meter_bytes", default=True, requires=["segment_downloader", Scheduler])
+class BandwidthMeterBytes(Module, BandwidthMeter, DownloadEventListener, SchedulerEventListener):
     log = logging.getLogger("BandwidthMeterImpl")
 
     def __init__(self):
@@ -70,10 +70,11 @@ class BandwidthMeterImpl(Module, BandwidthMeter, DownloadEventListener, Schedule
         # Changed bw meter computation
         est_bws = []
         for st in self.stats.values():
-            if st.start_time is None or st.last_byte_at is None:
+            if st.first_byte_at is None or st.last_byte_at is None:
+            #if st.start_time is None or st.last_byte_at is None:
                 continue
 
-            duration = st.last_byte_at - st.start_time
+            duration = st.last_byte_at - st.first_byte_at
             if duration > 0:
                 est_bws.append(8 * st.received_bytes / duration)
         

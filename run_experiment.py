@@ -80,6 +80,7 @@ def main():
     for i in range(n_containers):
         log_dir = exp_dir / str(i)
         log_dir.mkdir(parents=True, exist_ok=True)
+        trace_id = i
 
         env = os.environ.copy()
         env.update({
@@ -89,14 +90,13 @@ def main():
             "LAMDA": str(lamda),
             "NODE_ID": str(node_id),
             "ISTREAM_CONFIG": str(istream_config),
-            "BANDWIDTH_MIN": str(bw_min),
-            "BANDWIDTH_MAX": str(bw_max),
+            "TRACE_ID": str(trace_id),
             "EXPERIMENT_CONFIG": str(config_path),
         })
 
         cmd = [
             "docker", "compose",
-            "-f", "docker-compose.player.yaml",
+            "-f", "docker-compose.yaml",
             "-p", f"istream_player_{i}",
             "up", "-d", "--build", "--remove-orphans"
         ]

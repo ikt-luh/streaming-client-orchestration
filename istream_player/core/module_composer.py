@@ -18,6 +18,7 @@ from istream_player.modules.analyzer.file_content_listener import \
 from istream_player.modules.analyzer.playback import Playback
 from istream_player.modules.buffer.buffer_manager import BufferManagerImpl
 from istream_player.modules.bw_meter.bandwidth import BandwidthMeterImpl
+from istream_player.modules.bw_meter.bandwidth_bytes import BandwidthMeterBytes
 from istream_player.modules.downloader.local import LocalClient
 from istream_player.modules.downloader.quic.client import QuicClientImpl
 from istream_player.modules.downloader.tcp import TCPClientImpl
@@ -225,7 +226,7 @@ class PlayerComposer:
         self.register_module(
             "downloader", [LocalClient, TCPClientImpl, QuicClientImpl], downloader_initializer, "Downloader", False, "local"
         )
-        self.register_module("bw", [BandwidthMeterImpl], single_initializer, "Bandwidth Estimation", False, "bw_meter")
+        self.register_module("bw", [BandwidthMeterImpl, BandwidthMeterBytes], single_initializer, "Bandwidth Estimation", False, "bw_meter")
         self.register_module(
             "abr",
             [DashABRController, BufferABRController, BandwidthABRController, HybridABRController],

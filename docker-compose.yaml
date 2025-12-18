@@ -9,8 +9,7 @@ services:
     cap_add:
       - NET_ADMIN
     environment:
-      BANDWIDTH_MIN: ${BANDWIDTH_MIN:-5000}
-      BANDWIDTH_MAX: ${BANDWIDTH_MAX:-40000}
+      TRACE_ID: ${TRACE_ID:-0}
       INTERVAL: 1.0
     networks:
       - expnet

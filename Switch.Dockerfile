@@ -7,4 +7,7 @@ RUN apt-get update && \
 COPY switch.sh /app/switch.sh
 RUN chmod +x /app/switch.sh
 
+# Traces
+COPY resources/traces /traces
+
 ENTRYPOINT ["/app/switch.sh"]

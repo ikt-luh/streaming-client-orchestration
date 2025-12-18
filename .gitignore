@@ -204,6 +204,9 @@ dataset/
 runs/
 server
 
+*.csv
+*.log
+
 __MACOSX
 
 *.zip

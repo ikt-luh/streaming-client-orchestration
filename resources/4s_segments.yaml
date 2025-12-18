@@ -5,7 +5,7 @@ time_factor: 1.0
 
 mod_mpd: "mpd"
 mod_downloader: "tcp"
-mod_bw: "bw_meter"
+mod_bw: "bw_meter_bytes"
 mod_abr: "dash"
 mod_scheduler: "scheduler"
 mod_buffer: "buffer_manager"

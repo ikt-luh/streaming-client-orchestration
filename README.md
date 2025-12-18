@@ -42,4 +42,9 @@ you can find an [example config](./configs/experiment1_node1.yaml) for the param
 
 
 
+## Download Bandwidth Traces
+```
+cd resources/traces
+wget https://users.ugent.be/~jvdrhoof/dataset-4g/logs/logs_all.zip
+```
 

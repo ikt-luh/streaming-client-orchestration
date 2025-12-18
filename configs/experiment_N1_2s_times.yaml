@@ -2,7 +2,7 @@ node_id: 0 #ID of the host node
 n_containers: 1
 duration: 600 # in seconds
 sleep_lambda: 0.1 # Lambda value for exponential distr, E[sleep_time] = 1/lambda
-istream_player_config_path: ./resources/2s_segments.yaml
+istream_player_config_path: ./resources/2s_segments_times.yaml
 sequences:
   - "loot"
   - "soldier"
