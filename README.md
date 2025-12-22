@@ -48,3 +48,14 @@ cd resources/traces
 wget https://users.ugent.be/~jvdrhoof/dataset-4g/logs/logs_all.zip
 ```
 
+
+## 
+```
+git clone -b main https://github.com/ikt-luh/streaming-client-orchestration.git
+cd streaming-client-orchestration
+
+# Copy the traces to resource/traces
+
+# Replace Server IPs
+cd resource/
+NEW_IP="192.168.X.X"; sed -i "s#http://172.23.180.192:#http://$NEW_IP:#g" *.yaml
